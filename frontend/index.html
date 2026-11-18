@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>EC2 Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root {
+    --bg: #0a0d13;
+    --bg-elev: #0e121b;
+    --panel: #141926;
+    --panel-2: #1a2030;
+    --panel-border: #242b3d;
+    --panel-border-strong: #333c54;
+    --text: #e7e9ee;
+    --text-dim: #8b93a7;
+    --text-faint: #5c6479;
+    --accent: #f2a93b;
+    --accent-soft: rgba(242,169,59,0.12);
+    --accent-dim: #7a5a1f;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f2a93b;
+    --blue: #6ea8fe;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 8px 30px rgba(0,0,0,0.35);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 100% -10%, rgba(242,169,59,0.06), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  ::selection { background: rgba(242,169,59,0.3); }
+  /* Scrollbars */
+  * { scrollbar-width: thin; scrollbar-color: var(--panel-border-strong) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: var(--panel-border-strong); border-radius: 8px; border: 2px solid var(--bg); }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 260px; flex-shrink: 0;
+    padding: 24px 18px;
+    border-right: 1px solid var(--panel-border);
+    background: linear-gradient(180deg, var(--bg-elev), var(--bg));
+    display: flex;
+    flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 28px; }
+  .brand-icon {
+    width: 40px; height: 40px; border-radius: 11px;
+    background: linear-gradient(145deg, #f7bd54, var(--accent)); color: #1a1206;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; box-shadow: 0 4px 14px rgba(242,169,59,0.35);
+  }
+  .brand-title { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .brand-sub { font-size: 12px; color: var(--text-dim); }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px; border-radius: var(--radius-sm); margin-bottom: 6px;
+    cursor: pointer; font-size: 14px; color: var(--text-dim); font-weight: 500;
+    border: 1px solid transparent;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .nav-item.active {
+    color: var(--accent); background: var(--accent-soft);
+    border-color: rgba(242,169,59,0.35);
+  }
+  .nav-item:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.03); }
+
+  .sidebar-footer { margin-top: auto; font-size: 12px; padding-top: 18px; border-top: 1px solid var(--panel-border); }
+  .sidebar-footer label {
+    display: block; color: var(--text-faint); letter-spacing: 0.08em;
+    font-size: 11px; margin-bottom: 8px; text-transform: uppercase; font-weight: 600;
+  }
+  .region-code { color: var(--blue); font-size: 12px; margin: 10px 0 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .conn-status { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .conn-status .dot { box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
+
+  /* Main */
+  .main { flex: 1; padding: 32px 40px; min-width: 0; }
+  .page-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 28px; gap: 16px; flex-wrap: wrap;
+  }
+  .page-header h1 { margin: 0 0 6px 0; font-size: 26px; letter-spacing: -0.02em; }
+  .page-header p { margin: 0; color: var(--text-dim); font-size: 14px; }
+  .header-actions { display: flex; gap: 10px; }
+  .icon-btn, .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: var(--radius-sm); border: 1px solid var(--panel-border);
+    background: var(--panel); color: var(--text); cursor: pointer; font-size: 14px; font-weight: 500;
+    transition: border-color .15s ease, background .15s ease, transform .05s ease;
+  }
+  .btn:hover, .icon-btn:hover { border-color: var(--panel-border-strong); background: var(--panel-2); }
+  .icon-btn:active, .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    background: var(--accent); color: #1a1206; border: none; font-weight: 600;
+  }
+  .btn-primary:hover { filter: brightness(1.05); }
+
+  /* Shared control (inputs / selects) */
+  .text-input, .search-input, select.text-input {
+    width: 100%; padding: 11px 14px; border-radius: var(--radius-sm);
+    background: var(--bg-elev); color: var(--text);
+    border: 1px solid var(--panel-border); font-size: 14px;
+    font-family: inherit; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    outline: none;
+  }
+  .text-input::placeholder, .search-input::placeholder { color: var(--text-faint); }
+  .text-input:hover, .search-input:hover, select.text-input:hover { border-color: var(--panel-border-strong); }
+  .text-input:focus, .search-input:focus, select.text-input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--panel);
+  }
+  select.text-input, select#region-select {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93a7' d='M6 8 0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 38px;
+  }
+  select.text-input option, select#region-select option { background: var(--panel); color: var(--text); }
+  select#region-select {
+    width: 100%; padding: 10px 38px 10px 12px; border-radius: var(--radius-sm);
+    background-color: var(--bg-elev); color: var(--text); border: 1px solid var(--panel-border); font-size: 14px;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93a7' d='M6 8 0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  select#region-select:hover { border-color: var(--panel-border-strong); }
+  select#region-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* Stat cards */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 22px; }
+  .stat-card {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: var(--radius); padding: 20px; display: flex; align-items: center; gap: 16px;
+    transition: border-color .15s ease, transform .12s ease;
+  }
+  .stat-card:hover { border-color: var(--panel-border-strong); transform: translateY(-2px); }
+  .stat-icon {
+    width: 44px; height: 44px; border-radius: 11px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .stat-icon.total { background: rgba(242,169,59,0.15); color: var(--accent); }
+  .stat-icon.running { background: rgba(34,197,94,0.15); color: var(--green); }
+  .stat-icon.stopped { background: rgba(239,68,68,0.15); color: var(--red); }
+  .stat-icon.transitioning { background: rgba(242,169,59,0.15); color: var(--amber); }
+  .stat-value { font-size: 26px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+  .stat-label { color: var(--text-dim); font-size: 13px; margin-top: 5px; }
+
+  /* Panels row */
+  .panels-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 18px; margin-bottom: 22px; }
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 22px; }
+  .panel h3 { margin: 0 0 18px 0; font-size: 15px; font-weight: 600; }
+  .panel-header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend .dot.g { background: var(--green); } .legend .dot.r { background: var(--red); } .legend .dot.a { background: var(--amber); }
+
+  .donut-wrap { display: flex; justify-content: center; padding: 20px 0; }
+  .donut {
+    width: 170px; height: 170px; border-radius: 50%;
+    background: conic-gradient(var(--panel-border) 0deg 360deg);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; transition: background .4s ease;
+  }
+  .donut::after {
+    content: ""; position: absolute; width: 120px; height: 120px; border-radius: 50%;
+    background: var(--panel);
+  }
+  .donut-center { position: relative; z-index: 1; text-align: center; }
+  .donut-center .num { font-size: 26px; font-weight: 700; }
+  .donut-center .lbl { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; }
+
+  .region-bar-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .region-bar-row:last-child { margin-bottom: 0; }
+  .region-bar-row .rname { width: 150px; font-size: 13px; color: var(--text-dim); }
+  .region-bar-track { flex: 1; height: 10px; border-radius: 6px; background: var(--bg-elev); overflow: hidden; display: flex; }
+  .region-bar-track > div { transition: width .4s ease; }
+  .region-bar-count { width: 24px; text-align: right; font-size: 13px; font-weight: 600; }
+
+  /* Instances table */
+  .table-panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 22px; overflow: hidden; }
+  .table-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
+  .search-input { width: 260px; padding: 9px 14px; font-size: 13px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 10px 8px; border-bottom: 1px solid var(--panel-border); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; white-space: nowrap; }
+  td { padding: 13px 8px; border-bottom: 1px solid var(--panel-border); vertical-align: middle; }
+  tbody tr { transition: background .12s ease; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr:last-child td { border-bottom: none; }
+  td:nth-child(2) { font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--text-dim); font-size: 12px; }
+  .state-pill { padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .state-pill.running { color: var(--green); background: rgba(34,197,94,0.12); }
+  .state-pill.stopped { color: var(--red); background: rgba(239,68,68,0.12); }
+  .state-pill.pending, .state-pill.stopping, .state-pill.shutting-down { color: var(--amber); background: rgba(242,169,59,0.12); }
+  .state-pill.terminated { color: var(--text-dim); background: rgba(139,147,167,0.12); }
+  .row-actions { display: flex; gap: 6px; }
+  .row-actions button {
+    border: 1px solid var(--panel-border); background: var(--bg-elev); color: var(--text-dim);
+    border-radius: 7px; padding: 6px 11px; font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: color .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .row-actions button:hover { color: var(--text); border-color: var(--panel-border-strong); background: var(--panel-2); }
+  .row-actions button.danger:hover { color: var(--red); border-color: var(--red); background: rgba(239,68,68,0.08); }
+
+  .empty-state { text-align: center; padding: 56px 20px; color: var(--text-dim); }
+  .empty-state .cloud { font-size: 40px; margin-bottom: 12px; opacity: 0.6; }
+
+  /* Launch page */
+  #view-launch { max-width: 680px; margin: 0 auto; }
+  .launch-card {
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px;
+    padding: 28px; width: 100%; box-shadow: var(--shadow);
+  }
+  .launch-card > h3 { font-size: 17px; font-weight: 600; }
+  .field-label { font-size: 13px; margin-bottom: 8px; display: block; font-weight: 600; color: var(--text); }
+  .text-input { margin-bottom: 22px; }
+  .option-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+  .option-card {
+    border: 1px solid var(--panel-border); border-radius: 12px; padding: 22px 12px;
+    text-align: center; cursor: pointer; background: var(--bg-elev); font-weight: 500;
+    transition: border-color .15s ease, background .15s ease, color .15s ease, transform .1s ease;
+  }
+  .option-card:hover { border-color: var(--panel-border-strong); transform: translateY(-2px); }
+  .option-card .emoji { font-size: 26px; margin-bottom: 10px; }
+  .option-card.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .full-width-btn {
+    width: 100%; padding: 14px; border-radius: var(--radius-sm); border: none;
+    background: linear-gradient(145deg, #f7bd54, var(--accent)); color: #1a1206; font-weight: 700; font-size: 15px; cursor: pointer;
+    transition: filter .15s ease, transform .05s ease; box-shadow: 0 6px 18px rgba(242,169,59,0.25);
+  }
+  .full-width-btn:hover { filter: brightness(1.05); }
+  .full-width-btn:active { transform: translateY(1px); }
+  .full-width-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; box-shadow: none; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: var(--panel-2);
+    border: 1px solid var(--panel-border-strong); border-radius: var(--radius-sm); padding: 14px 18px;
+    font-size: 13px; max-width: 360px; box-shadow: var(--shadow);
+    display: none; animation: toast-in .2s ease;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .toast.error { border-color: var(--red); color: #ffb3b3; }
+  .toast.success { border-color: var(--green); }
+  .toast.warning { border-color: var(--amber); color: #ffd89b; }
+  .hidden { display: none !important; }
+
+  /* Modal / dialog */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(5,7,12,0.66); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100;
+    animation: overlay-in .15s ease;
+  }
+  @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px;
+    width: 100%; max-width: 480px; box-shadow: var(--shadow); overflow: hidden;
+    animation: modal-in .18s cubic-bezier(.2,.8,.3,1);
+  }
+  @keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+  .modal-head { display: flex; align-items: center; gap: 12px; padding: 20px 22px 0; }
+  .modal-icon {
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .modal-icon.danger { background: rgba(239,68,68,0.15); color: var(--red); }
+  .modal-icon.warning { background: rgba(242,169,59,0.15); color: var(--amber); }
+  .modal-icon.info { background: rgba(110,168,254,0.15); color: var(--blue); }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-body { padding: 14px 22px 4px; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+  .modal-body strong { color: var(--text); font-weight: 600; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 22px 22px; }
+  .modal .btn-cancel {
+    padding: 10px 16px; border-radius: var(--radius-sm); border: 1px solid var(--panel-border);
+    background: var(--bg-elev); color: var(--text); cursor: pointer; font-size: 14px; font-weight: 500;
+  }
+  .modal .btn-cancel:hover { border-color: var(--panel-border-strong); background: var(--panel-2); }
+  .modal .btn-confirm {
+    padding: 10px 18px; border-radius: var(--radius-sm); border: none;
+    background: var(--accent); color: #1a1206; cursor: pointer; font-size: 14px; font-weight: 600;
+  }
+  .modal .btn-confirm:hover { filter: brightness(1.05); }
+  .modal .btn-confirm.danger { background: var(--red); color: #fff; }
+
+  /* SSH command block */
+  .ssh-field { margin: 0 0 14px; }
+  .ssh-field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 600; margin-bottom: 6px; }
+  .code-copy { display: flex; align-items: stretch; gap: 8px; }
+  .code-copy code {
+    flex: 1; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 9px;
+    padding: 11px 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px;
+    color: var(--text); overflow-x: auto; white-space: nowrap;
+  }
+  .copy-btn {
+    border: 1px solid var(--panel-border); background: var(--bg-elev); color: var(--text-dim);
+    border-radius: 9px; padding: 0 14px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--panel-border-strong); background: var(--panel-2); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+  .ssh-user-select {
+    width: 100%; padding: 9px 12px; border-radius: 9px; background: var(--bg-elev);
+    border: 1px solid var(--panel-border); color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  .ssh-path-input {
+    width: 100%; padding: 9px 12px; border-radius: 9px; background: var(--bg-elev);
+    border: 1px solid var(--panel-border); color: var(--text); font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .ssh-path-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ssh-hint { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin: 8px 0 0; }
+  .ssh-hint code { background: var(--bg); padding: 1px 5px; border-radius: 4px; color: var(--accent); font-family: ui-monospace, Menlo, monospace; }
+  .ssh-hint strong { color: var(--text); }
+
+  .keypair-row { display: flex; gap: 10px; align-items: stretch; }
+  .keypair-row select { flex: 1; }
+  .keypair-row .btn { white-space: nowrap; flex-shrink: 0; }
+  .keypair-hint { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: 8px 0 22px; }
+  .keypair-hint code { background: var(--bg-elev); padding: 1px 5px; border-radius: 4px; color: var(--accent); font-family: ui-monospace, Menlo, monospace; }
+
+  /* SSH connectivity check */
+  .ssh-status { margin: 4px 0 2px; border-top: 1px solid var(--panel-border); padding-top: 14px; }
+  .ssh-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; margin-bottom: 8px; color: var(--text); }
+  .ssh-check:last-child { margin-bottom: 0; }
+  .ssh-check .mark { flex-shrink: 0; font-weight: 700; width: 16px; text-align: center; }
+  .ssh-check.ok .mark { color: var(--green); }
+  .ssh-check.bad .mark { color: var(--red); }
+  .ssh-check.warn .mark { color: var(--amber); }
+  .ssh-check.muted { color: var(--text-dim); }
+  .ssh-check .spinner {
+    width: 13px; height: 13px; border: 2px solid var(--panel-border-strong);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-top: 1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ssh-fix { margin-top: 12px; }
+  .ssh-fix .fix-btn {
+    width: 100%; padding: 11px; border-radius: 9px; border: 1px solid var(--amber);
+    background: rgba(242,169,59,0.1); color: var(--amber); font-weight: 600; font-size: 13px; cursor: pointer;
+    transition: background .12s;
+  }
+  .ssh-fix .fix-btn:hover { background: rgba(242,169,59,0.18); }
+  .ssh-fix .confirm-row { background: var(--bg-elev); border: 1px solid var(--panel-border); border-radius: 9px; padding: 12px; }
+  .ssh-fix .confirm-row p { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .ssh-fix .confirm-actions { display: flex; gap: 8px; }
+  .ssh-fix .confirm-actions button { flex: 1; padding: 9px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--panel-border); }
+  .ssh-fix .confirm-actions .go { background: var(--amber); color: #1a1206; border: none; }
+  .ssh-fix .confirm-actions .no { background: transparent; color: var(--text-dim); }
+
+  /* Field validation */
+  .text-input.invalid, select.text-input.invalid { border-color: var(--red); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+  .field-error { color: #ff9a9a; font-size: 12px; margin: -16px 0 18px; display: none; }
+  .field-error.show { display: block; }
+
+  .storage-box {
+    border: 1px solid var(--panel-border); border-radius: 12px; padding: 18px 20px;
+    background: var(--bg-elev); margin-top: 4px; margin-bottom: 4px;
+  }
+  .storage-hint { font-size: 12px; color: var(--text-dim); margin: 0 0 14px 0; line-height: 1.6; }
+  .storage-hint code { background: var(--bg); padding: 1px 6px; border-radius: 4px; color: var(--accent); font-family: ui-monospace, Menlo, monospace; }
+  .storage-mode-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .radio-label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .radio-label input { accent-color: var(--accent); width: 15px; height: 15px; }
+  .windows-warning { font-size: 12px; color: var(--amber); margin-top: 8px; }
+  .status-pill { padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .status-pill.attached { color: var(--green); background: rgba(34,197,94,0.12); }
+  .status-pill.orphaned { color: var(--amber); background: rgba(242,169,59,0.12); }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .panels-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 820px) {
+    .sidebar { position: static; height: auto; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--panel-border); }
+    .layout { flex-direction: column; }
+    .brand { margin-bottom: 0; margin-right: auto; }
+    .nav-item { margin-bottom: 0; }
+    .sidebar-footer { margin-top: 0; border-top: none; padding-top: 0; width: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .sidebar-footer label { display: none; }
+    #region-select { width: auto; margin: 0; }
+    .region-code { margin: 0; }
+    .main { padding: 24px 20px; }
+    .option-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .search-input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">▤</div>
+      <div>
+        <div class="brand-title">EC2 Manager</div>
+        <div class="brand-sub">AWS Control Panel</div>
+      </div>
+    </div>
+
+    <div class="nav-item" id="nav-dashboard">▦ Dashboard</div>
+    <div class="nav-item" id="nav-launch">＋ Launch Instance</div>
+    <div class="nav-item" id="nav-storage">🗄 Storage</div>
+
+    <div class="sidebar-footer">
+      <label>Active Region</label>
+      <select id="region-select"></select>
+      <div class="region-code" id="region-code"></div>
+      <div class="conn-status"><span class="dot"></span> Connected via boto3</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- DASHBOARD VIEW -->
+    <section id="view-dashboard">
+      <div class="page-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Live overview of your EC2 fleet</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" id="refresh-btn">⟳ Refresh</button>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-icon total">▤</div>
+          <div><div class="stat-value" id="stat-total">0</div><div class="stat-label">Total Instances</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon running">●</div>
+          <div><div class="stat-value" id="stat-running">0</div><div class="stat-label">Running</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stopped">●</div>
+          <div><div class="stat-value" id="stat-stopped">0</div><div class="stat-label">Stopped</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon transitioning">●</div>
+          <div><div class="stat-value" id="stat-transitioning">0</div><div class="stat-label">Transitioning</div></div>
+        </div>
+      </div>
+
+      <div class="panels-row">
+        <div class="panel">
+          <h3>State Distribution</h3>
+          <div class="donut-wrap">
+            <div class="donut" id="donut">
+              <div class="donut-center"><div class="num" id="donut-total">0</div><div class="lbl">INSTANCES</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header-row">
+            <h3>Region Footprint</h3>
+            <div class="legend">
+              <span><span class="dot g"></span>Running</span>
+              <span><span class="dot r"></span>Stopped</span>
+              <span><span class="dot a"></span>Transitioning</span>
+            </div>
+          </div>
+          <div id="region-footprint"></div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-panel-header">
+          <h3 style="margin:0;">Instances</h3>
+          <input class="search-input" id="search-box" placeholder="Search by name, ID, IP..." />
+        </div>
+        <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th><th>Instance ID</th><th>State</th><th>Type</th>
+              <th>Availability Zone</th><th>Public IP</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="instances-tbody"></tbody>
+        </table>
+        </div>
+        <div class="empty-state hidden" id="empty-state">
+          <div class="cloud">☁</div>
+          <div>No instances found in this region.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LAUNCH VIEW -->
+    <section id="view-launch" class="hidden">
+      <div class="page-header">
+        <div>
+          <h1>Launch Instance</h1>
+          <p>Provision a new EC2 instance in the active region</p>
+        </div>
+      </div>
+
+      <div class="launch-card">
+        <h3 style="margin-top:0;">Launch a new EC2 instance</h3>
+
+        <label class="field-label">Instance Name</label>
+        <input class="text-input" id="instance-name" placeholder="e.g. web-server-1" value="ins1" />
+
+        <label class="field-label">Operating System</label>
+        <div class="option-grid" id="os-grid"></div>
+
+        <label class="field-label">AMI (from your AWS account)</label>
+        <select class="text-input" id="ami-select">
+          <option value="">Loading AMIs…</option>
+        </select>
+
+        <label class="field-label">Subnet (from your AWS account)</label>
+        <select class="text-input" id="subnet-select">
+          <option value="">Loading subnets…</option>
+        </select>
+
+        <label class="field-label">Security Group (from your AWS account)</label>
+        <select class="text-input" id="sg-select">
+          <option value="">Loading security groups…</option>
+        </select>
+
+        <label class="field-label">Key Pair (from your AWS account)</label>
+        <div class="keypair-row">
+          <select class="text-input" id="keypair-select" style="margin-bottom:0;">
+            <option value="">Loading key pairs…</option>
+          </select>
+          <button type="button" class="btn" id="new-keypair-btn">＋ New key pair</button>
+        </div>
+        <p class="keypair-hint">No key, or lost the <code>.pem</code>? Create a new key pair — the private key downloads immediately (it can't be retrieved later).</p>
+
+        <div class="storage-box" id="storage-box">
+          <label class="field-label" style="margin-bottom:4px;">Persistent Storage (EFS)</label>
+          <p class="storage-hint">
+            An EFS filesystem is mounted at <code>/mnt/data</code> automatically on boot.
+            If this instance is ever terminated, the filesystem and its data survive and
+            can be reattached to a new instance from the Storage tab.
+          </p>
+
+          <div class="storage-mode-row">
+            <label class="radio-label">
+              <input type="radio" name="storage-mode" value="new" checked />
+              Create a new filesystem for this instance
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="storage-mode" value="reuse" />
+              Attach an existing (orphaned) filesystem
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="storage-mode" value="none" />
+              No persistent storage
+            </label>
+          </div>
+
+          <select class="text-input" id="reuse-fs-select" style="display:none; margin-bottom:0;">
+            <option value="">Loading orphaned filesystems…</option>
+          </select>
+          <div class="windows-warning hidden" id="windows-efs-warning">
+            EFS auto-mount isn't supported for Windows instances — storage will be skipped.
+          </div>
+        </div>
+
+        <button class="full-width-btn" id="launch-btn" style="margin-top:20px;">▷ Launch Instance</button>
+      </div>
+    </section>
+
+    <!-- STORAGE VIEW -->
+    <section id="view-storage" class="hidden">
+      <div class="page-header">
+        <div>
+          <h1>Storage</h1>
+          <p>EFS filesystems created by this app — persist independently of instance termination</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" id="storage-refresh-btn">⟳ Refresh</button>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Filesystem</th><th>Origin Instance</th><th>Status</th>
+              <th>Size</th><th>Region</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="storage-tbody"></tbody>
+        </table>
+        </div>
+        <div class="empty-state hidden" id="storage-empty-state">
+          <div class="cloud">🗄</div>
+          <div>No EFS filesystems yet. They're created automatically when you launch an instance with persistent storage enabled.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="modal-root"></div>
+
+<script>
+const API_BASE = window.location.origin.includes("null") ? "http://localhost:8000" : "";
+
+let regions = [];
+let osOptions = [];
+let activeRegion = null;
+let selectedOs = null;
+let allInstances = [];
+
+let toastTimer = null;
+function showToast(msg, type = "success") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast " + type;
+  t.style.display = "block";
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = "none"; }, 4200);
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- Modal system ----------
+function closeModal() {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = "";
+  document.removeEventListener("keydown", modalKeyHandler);
+}
+function modalKeyHandler(e) {
+  if (e.key === "Escape") {
+    const cancel = document.querySelector("#modal-root [data-modal-cancel]");
+    if (cancel) cancel.click(); else closeModal();
+  }
+}
+
+/**
+ * Generic modal. `opts`: { icon, iconType, title, bodyHtml, confirmLabel,
+ * confirmDanger, cancelLabel, onConfirm }. Returns nothing; wire behaviour via
+ * callbacks. Pass cancelLabel:null to hide the cancel button (alert style).
+ */
+function openModal(opts) {
+  const root = document.getElementById("modal-root");
+  const {
+    icon = "!", iconType = "info", title = "", bodyHtml = "",
+    confirmLabel = "OK", confirmDanger = false,
+    cancelLabel = "Cancel", onConfirm = closeModal,
+  } = opts;
+
+  root.innerHTML = `
+    <div class="modal-overlay" data-overlay>
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div class="modal-icon ${iconType}">${icon}</div>
+          <div class="modal-title">${escapeHtml(title)}</div>
+        </div>
+        <div class="modal-body">${bodyHtml}</div>
+        <div class="modal-foot">
+          ${cancelLabel ? `<button class="btn-cancel" data-modal-cancel>${escapeHtml(cancelLabel)}</button>` : ""}
+          <button class="btn-confirm ${confirmDanger ? "danger" : ""}" data-modal-confirm>${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>
+    </div>`;
+
+  const overlay = root.querySelector("[data-overlay]");
+  overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
+  const cancelBtn = root.querySelector("[data-modal-cancel]");
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+  root.querySelector("[data-modal-confirm]").onclick = () => onConfirm();
+  document.addEventListener("keydown", modalKeyHandler);
+  return root.querySelector(".modal");
+}
+
+/** Promise-based confirm dialog (replaces native confirm()). */
+function confirmDialog({ title, message, confirmLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    openModal({
+      icon: danger ? "⚠" : "?", iconType: danger ? "danger" : "warning",
+      title, bodyHtml: `<p style="margin:0;">${escapeHtml(message)}</p>`,
+      confirmLabel, confirmDanger: danger,
+      onConfirm: () => { closeModal(); resolve(true); },
+    });
+    document.querySelector("#modal-root [data-modal-cancel]").addEventListener("click", () => resolve(false));
+    document.querySelector("#modal-root [data-overlay]").addEventListener("mousedown", (e) => {
+      if (e.target.hasAttribute("data-overlay")) resolve(false);
+    });
+  });
+}
+
+/** Simple validation alert (single OK button). */
+function alertDialog({ title, message, iconType = "warning", icon = "⚠" }) {
+  openModal({
+    icon, iconType, title,
+    bodyHtml: `<p style="margin:0;">${escapeHtml(message)}</p>`,
+    confirmLabel: "Got it", cancelLabel: null,
+    onConfirm: closeModal,
+  });
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API_BASE + path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data.detail && data.detail.message) || "Request failed";
+    throw new Error(msg);
+  }
+  return data;
+}
+
+// ---------- Navigation ----------
+function showView(view) {
+  document.getElementById("view-dashboard").classList.toggle("hidden", view !== "dashboard");
+  document.getElementById("view-launch").classList.toggle("hidden", view !== "launch");
+  document.getElementById("view-storage").classList.toggle("hidden", view !== "storage");
+  document.getElementById("nav-dashboard").classList.toggle("active", view === "dashboard");
+  document.getElementById("nav-launch").classList.toggle("active", view === "launch");
+  document.getElementById("nav-storage").classList.toggle("active", view === "storage");
+  if (view === "dashboard") loadDashboard();
+  if (view === "launch") { loadOrphanedFilesystems(); loadLaunchResources(); }
+  if (view === "storage") loadStorageView();
+}
+document.getElementById("nav-dashboard").onclick = () => showView("dashboard");
+document.getElementById("nav-launch").onclick = () => showView("launch");
+document.getElementById("nav-storage").onclick = () => showView("storage");
+
+// ---------- Region selector ----------
+async function initRegions() {
+  const data = await api("/api/regions");
+  regions = data;
+  const sel = document.getElementById("region-select");
+  sel.innerHTML = regions.map(r => `<option value="${r.id}">${r.label}</option>`).join("");
+  activeRegion = regions[0].id;
+  sel.value = activeRegion;
+  document.getElementById("region-code").textContent = activeRegion;
+  sel.onchange = () => {
+    activeRegion = sel.value;
+    document.getElementById("region-code").textContent = activeRegion;
+    loadDashboard();
+    if (!document.getElementById("view-launch").classList.contains("hidden")) {
+      loadLaunchResources();
+    }
+  };
+}
+
+// ---------- OS selector (launch view) ----------
+async function initOsOptions() {
+  const data = await api("/api/os-options");
+  osOptions = data;
+  selectedOs = osOptions[0].id;
+  const emojiMap = { "amazon-linux": "🟠", "ubuntu": "🐧", "windows": "🪟" };
+  const grid = document.getElementById("os-grid");
+  grid.innerHTML = osOptions.map(o => `
+    <div class="option-card ${o.id === selectedOs ? "selected" : ""}" data-os="${o.id}">
+      <div class="emoji">${emojiMap[o.id] || "💻"}</div>
+      <div>${o.label}</div>
+    </div>
+  `).join("");
+  grid.querySelectorAll(".option-card").forEach(card => {
+    card.onclick = () => {
+      selectedOs = card.dataset.os;
+      grid.querySelectorAll(".option-card").forEach(c => c.classList.remove("selected"));
+      card.classList.add("selected");
+      updateWindowsWarning();
+      loadAmis();
+    };
+  });
+}
+
+// ---------- Live AWS resource dropdowns (AMI / subnet / SG / key pair) ----------
+async function loadAmis() {
+  const select = document.getElementById("ami-select");
+  select.innerHTML = `<option value="">Loading AMIs…</option>`;
+  try {
+    const res = await api(`/api/amis?region=${activeRegion}&os_type=${selectedOs}`);
+    const amis = res.data;
+    select.innerHTML = amis.length
+      ? amis.map(a => `<option value="${a.ami_id}">${a.name} (${a.ami_id})</option>`).join("")
+      : `<option value="">No AMIs found for this OS in this region</option>`;
+  } catch (e) {
+    select.innerHTML = `<option value="">Failed to load AMIs</option>`;
+    showToast(e.message, "error");
+  }
+}
+
+async function loadSubnets() {
+  const select = document.getElementById("subnet-select");
+  select.innerHTML = `<option value="">Loading subnets…</option>`;
+  try {
+    const res = await api(`/api/subnets?region=${activeRegion}`);
+    const subnets = res.data;
+    select.innerHTML = subnets.length
+      ? subnets.map(s => `<option value="${s.subnet_id}" data-vpc="${s.vpc_id}">${s.name ? s.name + " — " : ""}${s.subnet_id} (${s.availability_zone}, ${s.cidr_block})</option>`).join("")
+      : `<option value="">No subnets found in this region</option>`;
+    loadSecurityGroups();
+  } catch (e) {
+    select.innerHTML = `<option value="">Failed to load subnets</option>`;
+    showToast(e.message, "error");
+  }
+}
+
+async function loadSecurityGroups() {
+  const subnetSelect = document.getElementById("subnet-select");
+  const vpcId = subnetSelect.selectedOptions[0]?.dataset.vpc;
+  const select = document.getElementById("sg-select");
+  select.innerHTML = `<option value="">Loading security groups…</option>`;
+  try {
+    const url = vpcId
+      ? `/api/security-groups?region=${activeRegion}&vpc_id=${vpcId}`
+      : `/api/security-groups?region=${activeRegion}`;
+    const res = await api(url);
+    const sgs = res.data;
+    select.innerHTML = sgs.length
+      ? sgs.map(sg => `<option value="${sg.security_group_id}">${sg.name} (${sg.security_group_id})</option>`).join("")
+      : `<option value="">No security groups found</option>`;
+  } catch (e) {
+    select.innerHTML = `<option value="">Failed to load security groups</option>`;
+    showToast(e.message, "error");
+  }
+}
+
+async function loadKeyPairs() {
+  const select = document.getElementById("keypair-select");
+  select.innerHTML = `<option value="">Loading key pairs…</option>`;
+  try {
+    const res = await api(`/api/key-pairs?region=${activeRegion}`);
+    const keys = res.data;
+    select.innerHTML = keys.length
+      ? keys.map(k => `<option value="${k.key_name}">${k.key_name}</option>`).join("")
+      : `<option value="">No key pairs found in this region</option>`;
+  } catch (e) {
+    select.innerHTML = `<option value="">Failed to load key pairs</option>`;
+    showToast(e.message, "error");
+  }
+}
+
+function loadLaunchResources() {
+  loadAmis();
+  loadSubnets(); // also triggers loadSecurityGroups() once subnets resolve
+  loadKeyPairs();
+}
+
+document.getElementById("subnet-select").addEventListener("change", loadSecurityGroups);
+
+// ---------- Create + download a new key pair ----------
+function downloadPem(keyName, contents) {
+  const blob = new Blob([contents], { type: "application/x-pem-file" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${keyName}.pem`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function openKeyPairDialog() {
+  openModal({
+    icon: "🔑", iconType: "info",
+    title: "Create a new key pair",
+    bodyHtml: `
+      <div class="ssh-field">
+        <label>Key pair name</label>
+        <input class="ssh-path-input" id="new-key-name" placeholder="e.g. my-key" spellcheck="false" autocomplete="off" />
+        <p class="ssh-hint">Created in <strong>${escapeHtml(activeRegion)}</strong>. The <code>.pem</code> downloads instantly and <strong>cannot be retrieved again</strong> — keep it safe.</p>
+      </div>
+    `,
+    confirmLabel: "Create & download", cancelLabel: "Cancel",
+    onConfirm: async () => {
+      const input = document.getElementById("new-key-name");
+      const name = input.value.trim();
+      if (!name) {
+        input.classList.add("invalid");
+        showToast("Enter a name for the key pair", "error");
+        return;
+      }
+      const btn = document.querySelector("#modal-root [data-modal-confirm]");
+      btn.disabled = true; btn.textContent = "Creating…";
+      try {
+        const res = await api("/api/key-pairs", {
+          method: "POST",
+          body: JSON.stringify({ region: activeRegion, key_name: name }),
+        });
+        downloadPem(res.data.key_name, res.data.private_key);
+        closeModal();
+        showToast(`Key pair "${res.data.key_name}" created — check your downloads for ${res.data.key_name}.pem`, "success");
+        await loadKeyPairs();
+        document.getElementById("keypair-select").value = res.data.key_name;
+      } catch (e) {
+        showToast(e.message, "error");
+        btn.disabled = false; btn.textContent = "Create & download";
+      }
+    },
+  });
+  const input = document.getElementById("new-key-name");
+  input.focus();
+  input.addEventListener("input", () => input.classList.remove("invalid"));
+}
+
+document.getElementById("new-keypair-btn").onclick = openKeyPairDialog;
+
+function updateWindowsWarning() {
+  const warn = document.getElementById("windows-efs-warning");
+  const isWindows = selectedOs === "windows";
+  warn.classList.toggle("hidden", !isWindows);
+  document.querySelectorAll('input[name="storage-mode"]').forEach(r => { r.disabled = isWindows; });
+}
+
+// ---------- Storage mode radios ----------
+document.querySelectorAll('input[name="storage-mode"]').forEach(radio => {
+  radio.addEventListener("change", (e) => {
+    document.getElementById("reuse-fs-select").style.display =
+      e.target.value === "reuse" ? "block" : "none";
+  });
+});
+
+async function loadOrphanedFilesystems() {
+  const select = document.getElementById("reuse-fs-select");
+  try {
+    const data = await api(`/api/storage?region=${activeRegion}`);
+    const orphaned = data.data.filter(fs => fs.status === "orphaned");
+    if (!orphaned.length) {
+      select.innerHTML = `<option value="">No orphaned filesystems in this region</option>`;
+      return;
+    }
+    select.innerHTML = orphaned.map(fs => {
+      const sizeMb = (fs.size_bytes / 1024 / 1024).toFixed(1);
+      return `<option value="${fs.filesystem_id}">${fs.filesystem_id} — from "${fs.origin_instance_name}" (${sizeMb} MB)</option>`;
+    }).join("");
+  } catch (e) {
+    select.innerHTML = `<option value="">Couldn't load filesystems</option>`;
+  }
+}
+
+// ---------- Dashboard data ----------
+function stateClass(state) {
+  return (state || "").toLowerCase().replace(/_/g, "-");
+}
+
+function computeStats(instances) {
+  const stats = { total: instances.length, running: 0, stopped: 0, transitioning: 0 };
+  instances.forEach(i => {
+    const s = i.state;
+    if (s === "running") stats.running++;
+    else if (s === "stopped") stats.stopped++;
+    else if (["pending", "stopping", "shutting-down"].includes(s)) stats.transitioning++;
+  });
+  return stats;
+}
+
+function renderDonut(stats) {
+  const total = stats.total || 1;
+  const runDeg = (stats.running / total) * 360;
+  const stopDeg = (stats.stopped / total) * 360;
+  const transDeg = (stats.transitioning / total) * 360;
+  const donut = document.getElementById("donut");
+  if (stats.total === 0) {
+    donut.style.background = "conic-gradient(var(--panel-border) 0deg 360deg)";
+  } else {
+    donut.style.background = `conic-gradient(
+      var(--green) 0deg ${runDeg}deg,
+      var(--red) ${runDeg}deg ${runDeg + stopDeg}deg,
+      var(--amber) ${runDeg + stopDeg}deg ${runDeg + stopDeg + transDeg}deg
+    )`;
+  }
+  document.getElementById("donut-total").textContent = stats.total;
+}
+
+function renderStats(stats) {
+  document.getElementById("stat-total").textContent = stats.total;
+  document.getElementById("stat-running").textContent = stats.running;
+  document.getElementById("stat-stopped").textContent = stats.stopped;
+  document.getElementById("stat-transitioning").textContent = stats.transitioning;
+}
+
+function renderRegionFootprint(instancesByRegion) {
+  const wrap = document.getElementById("region-footprint");
+  const maxCount = Math.max(1, ...Object.values(instancesByRegion).map(v => v.length));
+  wrap.innerHTML = regions.map(r => {
+    const list = instancesByRegion[r.id] || [];
+    const running = list.filter(i => i.state === "running").length;
+    const stopped = list.filter(i => i.state === "stopped").length;
+    const trans = list.length - running - stopped;
+    const pct = (n) => (list.length ? (n / maxCount) * 100 : 0);
+    return `
+      <div class="region-bar-row">
+        <div class="rname">${r.label}</div>
+        <div class="region-bar-track">
+          <div style="width:${pct(running)}%; background:var(--green);"></div>
+          <div style="width:${pct(stopped)}%; background:var(--red);"></div>
+          <div style="width:${pct(trans)}%; background:var(--amber);"></div>
+        </div>
+        <div class="region-bar-count">${list.length}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderTable(instances) {
+  const tbody = document.getElementById("instances-tbody");
+  const emptyState = document.getElementById("empty-state");
+  if (!instances.length) {
+    tbody.innerHTML = "";
+    emptyState.classList.remove("hidden");
+    return;
+  }
+  emptyState.classList.add("hidden");
+  tbody.innerHTML = instances.map(i => `
+    <tr>
+      <td>${i.name}</td>
+      <td>${i.instance_id}</td>
+      <td><span class="state-pill ${stateClass(i.state)}">${i.state}</span></td>
+      <td>${i.instance_type}</td>
+      <td>${i.availability_zone}</td>
+      <td>${i.public_ip}</td>
+      <td class="row-actions">
+        <button data-action="ssh" data-id="${i.instance_id}" data-region="${i.region}">⌦ SSH</button>
+        <button data-action="start" data-id="${i.instance_id}" data-region="${i.region}">Start</button>
+        <button data-action="stop" data-id="${i.instance_id}" data-region="${i.region}">Stop</button>
+        <button class="danger" data-action="terminate" data-id="${i.instance_id}" data-region="${i.region}">Terminate</button>
+      </td>
+    </tr>
+  `).join("");
+
+  tbody.querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => handleInstanceAction(btn.dataset.action, btn.dataset.id, btn.dataset.region);
+  });
+}
+
+async function handleInstanceAction(action, instanceId, region) {
+  const inst = allInstances.find(i => i.instance_id === instanceId);
+
+  if (action === "ssh") {
+    openSshDialog(inst || { instance_id: instanceId, region });
+    return;
+  }
+
+  try {
+    if (action === "start") {
+      if (inst && inst.state === "running") {
+        return alertDialog({ title: "Already running", iconType: "info", icon: "ℹ",
+          message: `${inst.name} (${instanceId}) is already running.` });
+      }
+      await api("/api/instances/start", { method: "POST", body: JSON.stringify({ instance_id: instanceId, region }) });
+      showToast(`Start requested for ${instanceId}`);
+    } else if (action === "stop") {
+      if (inst && inst.state === "stopped") {
+        return alertDialog({ title: "Already stopped", iconType: "info", icon: "ℹ",
+          message: `${inst.name} (${instanceId}) is already stopped.` });
+      }
+      await api("/api/instances/stop", { method: "POST", body: JSON.stringify({ instance_id: instanceId, region }) });
+      showToast(`Stop requested for ${instanceId}`);
+    } else if (action === "terminate") {
+      const ok = await confirmDialog({
+        title: "Terminate instance",
+        message: `Terminate ${inst ? inst.name + " (" + instanceId + ")" : instanceId}? This permanently deletes the instance and cannot be undone.`,
+        confirmLabel: "Terminate", danger: true,
+      });
+      if (!ok) return;
+      await api(`/api/instances/${instanceId}?region=${region}`, { method: "DELETE" });
+      showToast(`Termination requested for ${instanceId}`, "warning");
+    }
+    setTimeout(loadDashboard, 1200);
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+// ---------- SSH connect dialog ----------
+function openSshDialog(inst) {
+  // Validation gates — surface a clear popup instead of a broken command.
+  if (inst.state && inst.state !== "running") {
+    return alertDialog({
+      title: "Instance is not running",
+      message: `${inst.name || inst.instance_id} is currently "${inst.state}". Start the instance and wait for it to reach the running state before connecting via SSH.`,
+    });
+  }
+  const host = (inst.public_ip && inst.public_ip !== "—") ? inst.public_ip : (inst.public_dns || "");
+  if (!host) {
+    return alertDialog({
+      title: "No public address",
+      message: `${inst.name || inst.instance_id} has no public IP or DNS name, so it can't be reached over SSH from here. Launch it in a subnet that assigns a public IP, or connect through a bastion/VPN.`,
+    });
+  }
+  if (inst.is_windows) {
+    return alertDialog({
+      title: "Windows instance",
+      iconType: "info", icon: "🪟",
+      message: `${inst.name || inst.instance_id} is a Windows instance. Use RDP (port 3389) with the "Administrator" account and the decrypted password from your key pair — SSH is not enabled by default.`,
+    });
+  }
+
+  const keyName = inst.key_name || "";
+  const users = ["ec2-user", "ubuntu", "admin", "root", "centos", "fedora"];
+  const defaultUser = inst.ssh_user || "ec2-user";
+  const orderedUsers = [defaultUser, ...users.filter(u => u !== defaultUser)];
+  const keyFile = keyName ? `${keyName}.pem` : "your-key.pem";
+  const defaultKeyPath = `~/.ssh/${keyFile}`;
+
+  const buildCmd = (user, keyPath) => `ssh -i ${keyPath} ${user}@${host}`;
+  const buildChmod = (keyPath) => `chmod 400 ${keyPath}`;
+
+  openModal({
+    icon: "⌦", iconType: "info",
+    title: `Connect to ${inst.name || inst.instance_id}`,
+    bodyHtml: `
+      <div class="ssh-field">
+        <label>SSH user</label>
+        <select class="ssh-user-select" id="ssh-user">
+          ${orderedUsers.map(u => `<option value="${u}">${u}</option>`).join("")}
+        </select>
+      </div>
+      <div class="ssh-field">
+        <label>Path to your private key (.pem)</label>
+        <input class="ssh-path-input" id="ssh-keypath" value="${escapeHtml(defaultKeyPath)}" spellcheck="false" />
+        <p class="ssh-hint">Point this at the <strong>${escapeHtml(keyFile)}</strong> file you downloaded when the "${escapeHtml(keyName || "—")}" key pair was created — e.g. <code>~/Downloads/${escapeHtml(keyFile)}</code>. The app can't detect where you saved it.</p>
+      </div>
+      <div class="ssh-field">
+        <label>Connection command</label>
+        <div class="code-copy">
+          <code id="ssh-cmd">${escapeHtml(buildCmd(defaultUser, defaultKeyPath))}</code>
+          <button class="copy-btn" id="ssh-copy">Copy</button>
+        </div>
+      </div>
+      <div class="ssh-field">
+        <label>First time? Fix key permissions, then run the command above</label>
+        <div class="code-copy">
+          <code id="ssh-chmod">${escapeHtml(buildChmod(defaultKeyPath))}</code>
+        </div>
+        <p class="ssh-hint">At the <em>"Are you sure you want to continue connecting?"</em> prompt, type <strong>yes</strong> (the whole word).</p>
+      </div>
+      <div class="ssh-status" id="ssh-status"></div>
+    `,
+    confirmLabel: "Done", cancelLabel: null,
+    onConfirm: closeModal,
+  });
+
+  const userSel = document.getElementById("ssh-user");
+  const keyEl = document.getElementById("ssh-keypath");
+  const cmdEl = document.getElementById("ssh-cmd");
+  const chmodEl = document.getElementById("ssh-chmod");
+  const copyBtn = document.getElementById("ssh-copy");
+
+  const sync = () => {
+    const keyPath = keyEl.value.trim() || defaultKeyPath;
+    cmdEl.textContent = buildCmd(userSel.value, keyPath);
+    chmodEl.textContent = buildChmod(keyPath);
+    copyBtn.classList.remove("copied"); copyBtn.textContent = "Copy";
+  };
+  userSel.onchange = sync;
+  keyEl.oninput = sync;
+
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(cmdEl.textContent);
+      copyBtn.classList.add("copied"); copyBtn.textContent = "Copied ✓";
+    } catch {
+      showToast("Couldn't copy — select the command manually.", "error");
+    }
+  };
+
+  renderSshStatus(inst);
+}
+
+// Check whether SSH can actually reach the instance and, if the security group
+// blocks port 22, offer an inline one-click fix (kept inline rather than a
+// stacked modal so the SSH dialog stays open).
+async function renderSshStatus(inst) {
+  const el = document.getElementById("ssh-status");
+  if (!el) return;
+  el.innerHTML = `<div class="ssh-check muted"><span class="spinner"></span> Checking connectivity…</div>`;
+
+  let c;
+  try {
+    const res = await api(`/api/instances/${inst.instance_id}/connectivity?region=${inst.region}`);
+    c = res.data;
+  } catch (e) {
+    el.innerHTML = `<div class="ssh-check warn"><span class="mark">!</span> Couldn't check connectivity: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  if (!document.getElementById("ssh-status")) return; // modal closed meanwhile
+
+  const check = (cls, mark, text) =>
+    `<div class="ssh-check ${cls}"><span class="mark">${mark}</span><span>${text}</span></div>`;
+
+  let rows = "";
+  rows += c.has_public_ip
+    ? check("ok", "✓", `Public IP assigned (${escapeHtml(c.public_ip)})`)
+    : check("bad", "✗", "No public IP — the instance isn't reachable from the internet.");
+
+  if (c.ssh_from_anywhere) {
+    rows += check("ok", "✓", "Security group allows SSH (port 22) from anywhere.");
+  } else if (c.ssh_cidrs && c.ssh_cidrs.length) {
+    rows += check("warn", "!", `SSH (port 22) is only allowed from: ${escapeHtml(c.ssh_cidrs.join(", "))}. If that's not your network, the connection will time out.`);
+  } else {
+    rows += check("bad", "✗", "Security group blocks SSH (port 22) — this is why the connection times out.");
+  }
+
+  el.innerHTML = rows + `<div class="ssh-fix" id="ssh-fix"></div>`;
+
+  if (!c.ssh_from_anywhere) {
+    renderOpenPortButton(inst);
+  }
+}
+
+function renderOpenPortButton(inst) {
+  const fix = document.getElementById("ssh-fix");
+  if (!fix) return;
+  fix.innerHTML = `<button class="fix-btn" id="open-port-btn">🔓 Open SSH (port 22) to the internet</button>`;
+  document.getElementById("open-port-btn").onclick = () => {
+    // Inline confirmation (opening 0.0.0.0/0 modifies your security group).
+    fix.innerHTML = `
+      <div class="confirm-row">
+        <p>This adds an inbound rule allowing <strong>TCP&nbsp;22 from 0.0.0.0/0</strong> (anywhere) to this instance's security group. Anyone on the internet will be able to reach the SSH port.</p>
+        <div class="confirm-actions">
+          <button class="no" id="open-port-cancel">Cancel</button>
+          <button class="go" id="open-port-go">Open port 22</button>
+        </div>
+      </div>`;
+    document.getElementById("open-port-cancel").onclick = () => renderOpenPortButton(inst);
+    document.getElementById("open-port-go").onclick = async () => {
+      const btn = document.getElementById("open-port-go");
+      btn.disabled = true; btn.textContent = "Opening…";
+      try {
+        await api(`/api/instances/${inst.instance_id}/allow-ssh`, {
+          method: "POST",
+          body: JSON.stringify({ region: inst.region, cidr: "0.0.0.0/0" }),
+        });
+        showToast("Port 22 opened — try connecting now.", "success");
+        renderSshStatus(inst); // re-check to confirm it's now open
+      } catch (e) {
+        showToast(e.message, "error");
+        renderOpenPortButton(inst);
+      }
+    };
+  };
+}
+
+async function loadDashboard() {
+  try {
+    // A single all-regions call already contains the current region's
+    // instances, so we derive the current-region view from it instead of
+    // making a second, redundant round-trip.
+    const allRegionsData = await api("/api/instances/all-regions");
+
+    allInstances = allRegionsData.data.filter(i => i.region === activeRegion);
+    const stats = computeStats(allInstances);
+    renderStats(stats);
+    renderDonut(stats);
+    renderTable(allInstances);
+
+    const byRegion = {};
+    allRegionsData.data.forEach(i => {
+      byRegion[i.region] = byRegion[i.region] || [];
+      byRegion[i.region].push(i);
+    });
+    renderRegionFootprint(byRegion);
+
+    if (allRegionsData.errors && allRegionsData.errors.length) {
+      const first = allRegionsData.errors[0];
+      showToast(`${first.region}: ${first.message}`, "error");
+    }
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+document.getElementById("refresh-btn").onclick = loadDashboard;
+
+document.getElementById("search-box").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  const filtered = allInstances.filter(i =>
+    i.name.toLowerCase().includes(q) ||
+    i.instance_id.toLowerCase().includes(q) ||
+    (i.public_ip || "").toLowerCase().includes(q)
+  );
+  renderTable(filtered);
+});
+
+// Clear the invalid highlight as soon as the user edits a flagged field.
+["instance-name", "ami-select", "subnet-select", "sg-select", "keypair-select", "reuse-fs-select"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", () => el.classList.remove("invalid"));
+  if (el) el.addEventListener("change", () => el.classList.remove("invalid"));
+});
+
+function markInvalid(id) { document.getElementById(id)?.classList.add("invalid"); }
+
+document.getElementById("launch-btn").onclick = async () => {
+  const nameEl = document.getElementById("instance-name");
+  const name = nameEl.value.trim();
+  const amiId = document.getElementById("ami-select").value;
+  const subnetId = document.getElementById("subnet-select").value;
+  const sgId = document.getElementById("sg-select").value;
+  const keyName = document.getElementById("keypair-select").value;
+  const storageMode = document.querySelector('input[name="storage-mode"]:checked').value;
+
+  // ---- Validation: collect every problem, highlight fields, show one popup ----
+  const errors = [];
+  document.querySelectorAll(".launch-card .invalid").forEach(e => e.classList.remove("invalid"));
+
+  if (!name) { errors.push("Instance name is required."); markInvalid("instance-name"); }
+  else if (name.length > 128) { errors.push("Instance name must be 128 characters or fewer."); markInvalid("instance-name"); }
+  if (!amiId) { errors.push("Select an AMI."); markInvalid("ami-select"); }
+  if (!subnetId) { errors.push("Select a subnet."); markInvalid("subnet-select"); }
+  if (!sgId) { errors.push("Select a security group."); markInvalid("sg-select"); }
+  if (!keyName) { errors.push("Select a key pair."); markInvalid("keypair-select"); }
+  if (selectedOs !== "windows" && storageMode === "reuse" && !document.getElementById("reuse-fs-select").value) {
+    errors.push("Choose a filesystem to reuse, or pick another storage option.");
+    markInvalid("reuse-fs-select");
+  }
+
+  if (errors.length) {
+    const list = errors.length === 1
+      ? `<p style="margin:0;">${escapeHtml(errors[0])}</p>`
+      : `<ul style="margin:0; padding-left:18px;">${errors.map(e => `<li style="margin-bottom:6px;">${escapeHtml(e)}</li>`).join("")}</ul>`;
+    openModal({
+      icon: "⚠", iconType: "warning",
+      title: errors.length === 1 ? "Can't launch yet" : `${errors.length} things need attention`,
+      bodyHtml: list, confirmLabel: "Got it", cancelLabel: null, onConfirm: closeModal,
+    });
+    showToast("Please fix the highlighted fields", "error");
+    return;
+  }
+
+  const payload = {
+    name, os_type: selectedOs, region: activeRegion,
+    ami_id: amiId, subnet_id: subnetId, security_group_id: sgId, key_name: keyName,
+  };
+
+  if (selectedOs === "windows") {
+    payload.enable_efs = false;
+  } else if (storageMode === "new") {
+    payload.enable_efs = true;
+  } else if (storageMode === "reuse") {
+    payload.enable_efs = false;
+    payload.reuse_filesystem_id = document.getElementById("reuse-fs-select").value;
+  } else {
+    payload.enable_efs = false;
+  }
+
+  const btn = document.getElementById("launch-btn");
+  btn.disabled = true;
+  btn.textContent = "Launching...";
+  try {
+    const result = await api("/api/instances", { method: "POST", body: JSON.stringify(payload) });
+    let msg = `Instance ${result.data.instance_id} launched`;
+    if (result.data.efs_filesystem_id) msg += ` with storage ${result.data.efs_filesystem_id}`;
+    showToast(msg);
+    if (result.data.efs_warning) showToast(`Storage warning: ${result.data.efs_warning}`, "error");
+    showView("dashboard");
+  } catch (e) {
+    showToast(e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▷ Launch Instance";
+  }
+};
+
+// ---------- Storage view ----------
+async function loadStorageView() {
+  try {
+    const data = await api(`/api/storage/all-regions`);
+    renderStorageTable(data.data);
+    if (data.errors && data.errors.length) {
+      showToast(`${data.errors[0].region}: ${data.errors[0].message}`, "error");
+    }
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+function renderStorageTable(filesystems) {
+  const tbody = document.getElementById("storage-tbody");
+  const emptyState = document.getElementById("storage-empty-state");
+  if (!filesystems.length) {
+    tbody.innerHTML = "";
+    emptyState.classList.remove("hidden");
+    return;
+  }
+  emptyState.classList.add("hidden");
+  tbody.innerHTML = filesystems.map(fs => {
+    const sizeMb = (fs.size_bytes / 1024 / 1024).toFixed(1);
+    return `
+      <tr>
+        <td>${fs.filesystem_id}</td>
+        <td>${fs.origin_instance_name}</td>
+        <td><span class="status-pill ${fs.status}">${fs.status}</span></td>
+        <td>${sizeMb} MB</td>
+        <td>${fs.region}</td>
+        <td class="row-actions">
+          ${fs.status === "orphaned" ? `<button data-action="relaunch" data-fs="${fs.filesystem_id}" data-region="${fs.region}">Relaunch with this</button>` : ""}
+          <button class="danger" data-action="delete-fs" data-fs="${fs.filesystem_id}" data-region="${fs.region}">Delete</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => {
+      const fsId = btn.dataset.fs;
+      const region = btn.dataset.region;
+      if (btn.dataset.action === "relaunch") {
+        activeRegion = region;
+        document.getElementById("region-select").value = region;
+        document.getElementById("region-code").textContent = region;
+        showView("launch");
+        setTimeout(() => {
+          document.querySelector('input[name="storage-mode"][value="reuse"]').checked = true;
+          document.getElementById("reuse-fs-select").style.display = "block";
+          loadOrphanedFilesystems().then(() => {
+            document.getElementById("reuse-fs-select").value = fsId;
+          });
+        }, 50);
+      } else if (btn.dataset.action === "delete-fs") {
+        confirmDialog({
+          title: "Delete filesystem",
+          message: `Permanently delete filesystem ${fsId} and all its data? This cannot be undone.`,
+          confirmLabel: "Delete", danger: true,
+        }).then(ok => {
+          if (!ok) return;
+          api(`/api/storage/${fsId}?region=${region}`, { method: "DELETE" })
+            .then(() => { showToast(`Deleted ${fsId}`, "warning"); loadStorageView(); })
+            .catch(e => showToast(e.message, "error"));
+        });
+      }
+    };
+  });
+}
+
+document.getElementById("storage-refresh-btn").onclick = loadStorageView;
+
+// ---------- Init ----------
+(async function init() {
+  try {
+    await initRegions();
+    await initOsOptions();
+    showView("dashboard");
+  } catch (e) {
+    showToast("Failed to reach API: " + e.message, "error");
+  }
+})();
+</script>
+</body>
+</html>
